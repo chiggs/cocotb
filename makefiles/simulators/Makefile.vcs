@@ -39,11 +39,35 @@ endif
 $(SIM_BUILD)/pli.tab :
 	echo "acc+=rw,wn:*" > $@
 
+ifeq ($(GPI_IMPL),vpi)
+    CUSTOM_COMPILE_DEPS += $(SIM_BUILD)/pli.tab analyse_verilog
+    ifneq ($(VHDL_SOURCES),)
+        GPI_EXTRA = vhpi_cocotb
+        CUSTOM_COMPILE_DEPS += $(SIM_BUILD)/work
+        VERILOG_COMPILE_DEPS += analyse_vhdl
+    endif
+endif
+
+
+# Analyser phase
+$(SIM_BUILD)/work:
+	mkdir $(SIM_BUILD)/work
+
+.phony: analyse_vhdl
+analyse_vhdl: $(VHDL_SOURCES) $(SIM_BUILD)/work
+	cd $(SIM_BUILD) && vhdlan -nc $(VHDL_SOURCES)
+
+.phony: analyse_verilog
+analyse_verilog: $(VERILOG_SOURCES) $(SIM_BUILD)/work $(VERILOG_COMPILE_DEPS)
+	cd $(SIM_BUILD) && vlogan +define+COCOTB_SIM=1 -sverilog -debug $(VERILOG_SOURCES)
+
 # Compilation phase
-$(SIM_BUILD)/simv: $(SIM_BUILD) $(VERILOG_SOURCES) $(SIM_BUILD)/pli.tab $(COCOTB_LIBS) $(COCOTB_VPI_LIB) $(CUSTOM_COMPILE_DEPS)
+$(SIM_BUILD)/simv: $(SIM_BUILD) $(VERILOG_SOURCES) $(SIM_BUILD)/pli.tab $(COCOTB_LIBS) $(COCOTB_VPI_LIB) $(COCOTB_VHPI_LIB) $(CUSTOM_COMPILE_DEPS)
 	cd $(SIM_BUILD) && \
     LD_LIBRARY_PATH=$(LIB_DIR):$(LD_LIBRARY_PATH) TOPLEVEL=$(TOPLEVEL) \
-    vcs +acc+1 +vpi -P pli.tab +define+COCOTB_SIM=1 -sverilog $(EXTRA_ARGS) -debug -load libvpi.so $(COMPILE_ARGS) $(VERILOG_SOURCES)
+    vcs +acc+1 +vpi -P pli.tab $(EXTRA_ARGS) -debug -load libvpi.so $(TOPLEVEL)
+
+#$(COMPILE_ARGS) $(VERILOG_SOURCES)
 
 # Execution phase
 results.xml: $(SIM_BUILD)/simv $(PYTHON_FILES) $(CUSTOM_SIM_DEPS)
